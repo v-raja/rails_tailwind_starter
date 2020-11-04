@@ -1,0 +1,79 @@
+run "yarn add tailwindcss"
+run "yarn add @fullhuman/postcss-purgecss"
+
+# Generate tailwind.config.js
+run "npx tailwind init --full"
+
+run "mkdir -p app/javascript/stylesheets"
+run "mv tailwind.config.js app/javascript/stylesheets/tailwind.config.js"
+
+# Add required imports for Tailwind. Check the documentation to ensure these
+# imports are still correct
+run "touch app/javascript/stylesheets/application.scss"
+inject_into_file "app/javascript/stylesheets/application.scss" do <<~EOF
+  @import 'tailwindcss/base';
+  @import 'tailwindcss/components';
+  @import 'tailwindcss/utilities';
+
+  /*! purgecss start ignore */
+  // Add custom css you don't want to purge here
+  /*! purgecss end ignore */
+  EOF
+end
+
+# Let webpacker know we want to use Tailwind. Empty line for prettiness
+inject_into_file "app/javascript/packs/application.js" do <<~EOF
+
+  require('stylesheets/application.scss')
+  EOF
+end
+
+insert_into_file "app/views/layouts/application.html.erb",
+  after: "<%= stylesheet_link_tag 'application', media: 'all', 'data-turbolinks-track': 'reload' %>\n" do <<~EOF
+  \t\t<%= stylesheet_pack_tag 'application', 'data-turbolinks-track': 'reload' %>
+  EOF
+end
+
+# NOTE: if you've changed your postcss.config.js, make note of the changes and
+# add them back
+run "rm postcss.config.js"
+run "touch postcss.config.js"
+
+inject_into_file "postcss.config.js" do <<~EOF
+  let environment = {
+    plugins: [
+      require('tailwindcss')('./app/javascript/stylesheets/tailwind.config.js'),
+      require('autoprefixer'),
+      require('postcss-import'),
+      require('postcss-flexbugs-fixes'),
+      require('postcss-preset-env')({
+        autoprefixer: {
+          flexbox: 'no-2009'
+        },
+        stage: 3
+      })
+    ]
+  };
+
+  // Only run PurgeCSS in production
+  if (process.env.RAILS_ENV === 'production') {
+    environment.plugins.push(
+      require('@fullhuman/postcss-purgecss')({
+        content: [
+          './app/**/*.html.erb',
+          './app/**/*.html.haml',
+          './app/helpers/**/*.rb',
+          './app/javascript/**/*.js',
+          './app/javascript/**/*.vue',
+          './app/javascript/**/*.jsx'
+        ],
+        defaultExtractor: (content) => content.match(/[A-Za-z0-9-_:/]+/g) || []
+      })
+    );
+  }
+
+  module.exports = environment;
+  EOF
+end
+
+# NOTE: Remove 'app/assets/stylesheets/scaffold.scss' as it messes with Tailwind
